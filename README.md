@@ -4,7 +4,7 @@ Sweep through config settings with nested values to sweep
 - Sweep existing yaml, json or dataclass configs
 - Supports nested sweep definitions
 - Prioritize sweeps to minimize cache thrash
-- Config dynamic systems with AffiliateClass
+- Use typed configs for dynamic systems with the create_affiliate protocol
 - Save sweep and dataclass configs with ClassifiedJSON
 
 ```
@@ -145,41 +145,53 @@ Direction.LEFT
 
 ---
 
-### Affiliate Class Pattern
+## Typed Config with the create_affiliate protocol and ClassifiedJSON
 
-The affiliate class pattern separates the config from the algorithm being configured.  The config is setup with a class variable for the algorithm class it configures.  This way, the config acts as a factory for the algorithm class.
+Using typed configs makes it easier to work with to get intelli-sense, docstrings, etc.  However, there is a need to instantiate the system being configured.  Adding the function create_affiliate to every config class does just that.  The function create_affiliate creates an instance of the class it configures, i.e. it's affiliate.  The config can pass itself to the affiliate class or pass all needed values to the affiliate class.  The config acts as a factory for the affiliate class.
 
-For systems with lots of dynamic / union-style components, this allows for working with typed configuration with type-hints, intelli-sense, docstrings, etc. as opposed to working with large, untyped data structures for config.  
+This is useful for handling union type scenarios where you don't know the exact type upfront.
+```
+  loss: Hinge | MSE | L1 ...
+```
+When creating a system from a config, rather than having a separate factory class or large case/if statement to handle the various union types, the config itself creates the correct affiliate class.
+
+In addition to typed config and the create_affiliate protocol, there still needs to be the ability to save a config for reuse later.  This is where typed serialization such as ClassifiedJSON comes in.  ClassifiedJSON supports serializing typed python classes, such as dataclasses to json strings and deserialized back into the same typed pthon classes.
+
+Thus, instead of dealing with large, untyped datastructures and yaml files, config can now be managed with typed python classes with type-hints, intelli-sense, docstrings, etc.
 
 ```python
-# Psuedo-code for affiliate class pattern
+# Psuedo-code for typed config with the create_affiliate protocol and ClassifiedJSON
 
-class FavorLeft(AffiliateClass):
+# in this case, the config pass in all needed values to create it's affiliate
+@dataclass
+class FavorLeft:
     times: int = 2
+
+    def create_affiliate(self):
+        return FavorLeftStrategy(self.times)
     ...
 
 class FavorLeftStrategy(GoalieStrategy):
-    def __init__(self, config: FavorLeft):
+    def __init__(self, times: int):
         super().__init__('favor left')
-        self.config = config
+        self._times = times
     ...
 
-FavorLeft._affiliate_cls = FavorLeftStrategy
-
-
-class AlternateAfter(AffiliateClass):
+# in this case, the config passes itself to the affiliate it creates
+@dataclass
+class AlternateAfter:
     left_times: int = 2
-    ...
+    
+    def create_affiliate(self):
+        return AlternateAfterStrategy(self)
 
 class AlternateAfterStrategy(GoalieStrategy):
     def __init__(self, config: AlternateAfter):
         super().__init__('aleternate after')
-        self.config = config
+        self._config = config
     ...
 
-AlternateAfter._affiliate_cls = AlternateAfterStrategy
-
-
+@dataclass
 class PkConfig:
     goalie_strategy: FavorLeft | AlternateAfter
     ...
@@ -187,16 +199,29 @@ class PkConfig:
 def play_pk(config: PkConfig):
     goalie = config.goalie_strategy.create_affiliate()
     ...
+
+# build up the config with typed code . . .
+left = FavorLeft(5)
+config = PkConfig(left)
+
+# save off the config
+serialized_json = classifiedjson.dumps(config)
+
+#... tempus fugit...
+
+# now use the config
+config = classifiedjson.loads(serialized)
+play_pk(config)
 ```
 
 ---
 
-### Config dynamic system with AffiliateClass (full concrete example)
+### Example of typed config with create_affiliate protocol and ClassifiedJSON
 
 ```python
 from dataclasses import dataclass
 from enum import Enum
-from configsweep import Sweep, Sweeper, AffiliateClass
+from configsweep import Sweep, Sweeper
 from classifiedjson import dumps, loads
 
 
@@ -215,29 +240,34 @@ class GoalieStrategy:
         pass
 
 @dataclass
-class FavorLeft(AffiliateClass):
+class FavorLeft:
     times: int = 2
 
+    def create_affiliate(self):
+        return FavorLeftStrategy(self.times)
+
 class FavorLeftStrategy(GoalieStrategy):
-    def __init__(self, config: FavorLeft):
+    def __init__(self, times: int):
         super().__init__('favor left')
-        self.config = config
-        self.counter = 0
+        self._times = times
+        self._counter = 0
 
     def go_direction(self) -> Direction:
-        self.counter += 1
-        if self.counter % self.config.times == 0:
+        self._counter += 1
+        if self._counter % self._times == 0:
             return Direction.RIGHT
         else:
             return Direction.LEFT
 
-FavorLeft._affiliate_cls = FavorLeftStrategy
 
 @dataclass
-class AlternateAfter(AffiliateClass):
+class AlternateAfter:
     left_times: int = 2
     right_times: int = 3
     starting_direction: Direction = Direction.RIGHT
+
+    def create_affiliate(self):
+        return AlternateAfterStrategy(self)
 
 class AlternateAfterStrategy(GoalieStrategy):
     def __init__(self, config: AlternateAfter):
@@ -258,7 +288,6 @@ class AlternateAfterStrategy(GoalieStrategy):
  
         return direction
 
-AlternateAfter._affiliate_cls = AlternateAfterStrategy
 
 #######################
 # strikers
@@ -320,14 +349,21 @@ for combo in Sweeper(config):
 
 print(f"most_scores={most_scores} ({most_config.striker.name})")
 print(f"worst goalie strategy = {most_config.goalie_strategy}")
-
-# save off the most config
 most_json = dumps(most_config)
+
+#... tempus fugit...
+
+config = loads(most_json)
+
+#play back the most scores
+scores, saves = play_pk(config)
+print(f"scores={scores} ({config.striker.name})")
 ```
 output
 ```
 most_scores=13 (mbappe)
 worst goalie strategy = AlternateAfter(left_times=2, right_times=3, starting_direction=<Direction.RIGHT: 1>)
+scores=13 (mbappe)
 ```
 
 

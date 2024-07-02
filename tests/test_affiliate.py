@@ -3,15 +3,16 @@
 
 import pytest
 from dataclasses import dataclass
-from configsweep.affiliate import AffiliateClass
 from classifiedjson import dumps, loads
 
 
 @dataclass
-class MyConfig(AffiliateClass):
+class MyConfig:
     max: int = None
     min: int = -100
 
+    def create_affiliate(self):
+        return MySubject(self)
 
 class MySubject:
     def __init__(self, config: MyConfig):
@@ -19,11 +20,8 @@ class MySubject:
         self.limit = 5 * config.max
 
 
-MyConfig._affiliate_cls = MySubject
-
-
 @dataclass
-class MyConfigMissing(AffiliateClass):
+class MyConfigMissing:
     avg: int = 99
     mean: int = 78
 
@@ -46,7 +44,6 @@ def test_serialized():
 
 def test_missing():
     config = MyConfigMissing()
-    # forgot to set _affiliate_cls.
-    # catch this on attemp to create it
-    with pytest.raises(ValueError) as e_info:
+    # forgot to add create_affiliate function
+    with pytest.raises(AttributeError) as e_info:
         config.create_affiliate()

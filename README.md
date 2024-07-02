@@ -8,7 +8,7 @@ Sweep through config settings with nested values to sweep
 - Save sweep and dataclass configs with ClassifiedJSON
 
 ```
-pip install configsweep[classifiedjson]
+pip install 'configsweep[classifiedjson]'
 ```
 ```python
 from configsweep import Sweep, Sweeper
@@ -68,7 +68,7 @@ output
 Python >=3.8
 
 ```
-pip install configsweep[classifiedjson]
+pip install 'configsweep[classifiedjson]'
 ```
 
 If you don't need support to save sweep or dataclass configs to a file/string, you can install without classifiedjson.

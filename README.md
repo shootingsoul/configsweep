@@ -149,11 +149,12 @@ Direction.LEFT
 
 Using typed configs makes it easier to work with to get intelli-sense, docstrings, etc.  However, there is a need to instantiate the system being configured.  Adding the function create_affiliate to every config class does just that.  The function create_affiliate creates an instance of the class it configures, i.e. it's affiliate.  The config can pass itself to the affiliate class or pass all needed values to the affiliate class.  The config acts as a factory for the affiliate class.
 
-This is useful for handling union type scenarios where you don't know the exact type upfront.
+This is useful for handling union and subclass scenarios where you don't know the exact type ahead of time.
 ```
   loss: Hinge | MSE | L1 ...
+  metric: MetricBase
 ```
-When creating a system from a config, rather than having a separate factory class or large case/if statement to handle the various union types, the config itself creates the correct affiliate class.
+When creating a system from a config, rather than having a separate factory class or large case/if statement to handle the various union/subclass scenarios, the config itself creates the correct affiliate class.
 
 In addition to typed config and the create_affiliate protocol, there still needs to be the ability to save a config for reuse later.  This is where typed serialization such as ClassifiedJSON comes in.  ClassifiedJSON supports serializing typed python classes, such as dataclasses to json strings and deserialized back into the same typed pthon classes.
 
@@ -163,34 +164,34 @@ Thus, instead of dealing with large, untyped datastructures and yaml files, conf
 # Psuedo-code for typed config with the create_affiliate protocol and ClassifiedJSON
 
 # in this case, the config pass in all needed values to create it's affiliate
-@dataclass
-class FavorLeft:
-    times: int = 2
-
-    def create_affiliate(self):
-        return FavorLeftStrategy(self.times)
-    ...
-
 class FavorLeftStrategy(GoalieStrategy):
     def __init__(self, times: int):
         super().__init__('favor left')
         self._times = times
     ...
 
-# in this case, the config passes itself to the affiliate it creates
 @dataclass
-class AlternateAfter:
-    left_times: int = 2
-    
-    def create_affiliate(self):
-        return AlternateAfterStrategy(self)
+class FavorLeftConfig:
+    times: int = 2
 
+    def create_affiliate(self) -> FavorLeftStrategy:
+        return FavorLeftStrategy(self.times)
+
+# in this case, the config passes itself to the affiliate it creates
 class AlternateAfterStrategy(GoalieStrategy):
     def __init__(self, config: AlternateAfter):
         super().__init__('aleternate after')
         self._config = config
     ...
 
+@dataclass
+class AlternateAfterConfig:
+    left_times: int = 2
+    
+    def create_affiliate(self) -> AlternateAfterStrategy:
+        return AlternateAfterStrategy(self)
+
+# config with a union
 @dataclass
 class PkConfig:
     goalie_strategy: FavorLeft | AlternateAfter
@@ -239,13 +240,6 @@ class GoalieStrategy:
     def go_direction(self) -> Direction:
         pass
 
-@dataclass
-class FavorLeft:
-    times: int = 2
-
-    def create_affiliate(self):
-        return FavorLeftStrategy(self.times)
-
 class FavorLeftStrategy(GoalieStrategy):
     def __init__(self, times: int):
         super().__init__('favor left')
@@ -259,15 +253,13 @@ class FavorLeftStrategy(GoalieStrategy):
         else:
             return Direction.LEFT
 
-
 @dataclass
-class AlternateAfter:
-    left_times: int = 2
-    right_times: int = 3
-    starting_direction: Direction = Direction.RIGHT
+class FavorLeft:
+    times: int = 2
 
-    def create_affiliate(self):
-        return AlternateAfterStrategy(self)
+    def create_affiliate(self) -> FavorLeftStrategy:
+        return FavorLeftStrategy(self.times)
+
 
 class AlternateAfterStrategy(GoalieStrategy):
     def __init__(self, config: AlternateAfter):
@@ -287,6 +279,15 @@ class AlternateAfterStrategy(GoalieStrategy):
             self.counter = 0
  
         return direction
+
+@dataclass
+class AlternateAfter:
+    left_times: int = 2
+    right_times: int = 3
+    starting_direction: Direction = Direction.RIGHT
+
+    def create_affiliate(self) -> AlternateAfterStrategy:
+        return AlternateAfterStrategy(self)
 
 
 #######################
@@ -350,11 +351,8 @@ for combo in Sweeper(config):
 print(f"most_scores={most_scores} ({most_config.striker.name})")
 print(f"worst goalie strategy = {most_config.goalie_strategy}")
 most_json = dumps(most_config)
-
 #... tempus fugit...
-
 config = loads(most_json)
-
 #play back the most scores
 scores, saves = play_pk(config)
 print(f"scores={scores} ({config.striker.name})")

@@ -1,6 +1,6 @@
-# 2.0.1
+# 2.0.0 - 2024-07-04
 
-- Make create_affiliate a pure protocol
+- Make create_affiliate a protocol
 
 # 1.0.1 - 2024-07-01
 
